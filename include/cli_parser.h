@@ -4,6 +4,10 @@
 
 namespace css_checker {
 
+struct CliExit {
+    int code = 2;
+};
+
 class CliParser {
 public:
     CliParser();

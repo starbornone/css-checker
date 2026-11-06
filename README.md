@@ -4,14 +4,14 @@ A fast and efficient C++ tool for finding and removing unused CSS classes in web
 
 ## Features
 
-- **Fast Performance**: Written in C++ for optimal speed on large codebases
+- **Single pass**: Each code file is read once, then class names are looked up in memory
 - **Multi-Format Support**: 
   - JavaScript/TypeScript (.js, .jsx, .ts, .tsx)
   - Razor Pages (.cshtml) - ASP.NET Core
   - Web Forms (.aspx) - ASP.NET Framework
   - CSS files (.css)
-- **Smart Detection**: Recognizes dynamic class usage patterns and template literals
-- **Safe Cleanup**: Creates backup files before removing unused classes
+- **Smart Detection**: Reads each code file once and matches `class`, `className`, and `CssClass` attributes, plus `clsx` / `cn` / `classnames` and `classList` calls
+- **Safe Cleanup**: Keeps the first `.backup`, writes the cleaned file beside it, and replaces the stylesheet only after that write succeeds
 - **Detailed Reporting**: Generates markdown reports with comprehensive analysis
 - **Flexible Configuration**: Customizable file extensions and source directories
 
@@ -48,7 +48,7 @@ cmake --build . --config Release
 cd css-checker
 mkdir build
 cd build
-cmake .. -G "Visual Studio 17 2022" -A x64
+cmake .. -A x64
 cmake --build . --config Release
 ```
 
@@ -79,7 +79,7 @@ make -j$(nproc)
 # Preview what would be cleaned (no changes made)
 ./css_checker --dry-run
 
-# Actually remove unused classes (creates backups)
+# Remove exact-selector rules for unused classes (keeps the first .backup)
 ./css_checker --cleanup
 ```
 
@@ -109,37 +109,37 @@ OPTIONS:
     -r, --report <FILE> Report file path (default: unused-css-report.md)
     --verbose           Show detailed output
     --dry-run           Show what would be done without making changes
-    --cleanup           Remove unused CSS classes (creates backups)
+    --cleanup           Remove unused CSS classes (keeps the first .backup)
     --no-report         Don't generate markdown report
     --css-ext <EXTS>    CSS file extensions (default: .css)
     --code-ext <EXTS>   Code file extensions (default: .tsx,.ts,.js,.jsx,.cshtml,.aspx)
+    --ignore <REGEX>    Ignore class names matched by REGEX (repeatable)
 ```
 
 ## Supported File Types
 
-### CSS Files
-- Standard CSS class definitions (`.class-name`)
-- Ignores pseudo-classes, @media queries, and single-word classes
+CSS class names are read from `.css` files (comments and strings are skipped). Every configured code extension is scanned the same way:
 
-### JavaScript/TypeScript
-- Direct className usage: `className="my-class"`
-- Template literals: `` `my-class` ``
-- clsx() utility functions
-- Dynamic class generation patterns
+- `class`, `className`, and `CssClass` attributes, including `@class`
+- `clsx(...)`, `cn(...)`, `classnames(...)`
+- `classList.add` / `toggle` / `contains` / `remove`
+- A quoted string that is exactly one class token, such as `"lonely"`
+- `@apply`, `@extend`, and `composes` in stylesheets. The selector that defines a class is not a use
+- A computed class value, such as `class="@Model.Css"`, `CssClass="<%# Item.Css %>"`, `className={styles.btn}`, or `:class="itemClass"`. Names without a literal use are reported as dynamic and are not deleted. A string literal in the same expression still counts
 
-### Razor (.cshtml) Files
-- Standard HTML class attributes: `class="my-class"`
-- Razor syntax: `@class="my-class"`
-- Server-side expressions: `@{ ... }`
-- String interpolation: `$"my-class-{variable}"`
-- HTML Helpers and ViewBag/ViewData references
+`--ignore` takes a regular expression and can be repeated. `^col-` ignores `col-6` and does not ignore `color`. `^row$` ignores `row` and does not ignore `row-gap`.
 
-### Web Forms (.aspx) Files
-- HTML class attributes: `class="my-class"`
-- Server control CssClass properties: `CssClass="my-class"`
-- Code-behind references: `<%=  %>`, `<%#  %>`
-- Data binding expressions: `Eval()`, `Bind()`
-- User controls and master pages
+Add extensions with `--code-ext` when a project uses Vue, Svelte, HTML, or C# files. A `class` or `className` attribute in those files is enough.
+
+A template prefix such as `icon--${name}`, or a C# interpolated string with the same shape, marks `icon--*` as dynamic. Dynamic classes are reported and are not deleted. `node_modules`, `bin`, `obj`, and `.git` are not scanned.
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | No unused class has a selector that is exactly that class |
+| 1 | An unused class still has an exact selector |
+| 2 | Bad arguments, the files could not be analyzed, or cleanup failed |
 
 ## Examples
 
@@ -156,8 +156,8 @@ OPTIONS:
 ### Web Forms Project
 
 ```bash
-# Include Web Forms specific extensions
-./css_checker --code-ext .aspx,.ascx,.master,.cs --verbose
+# Include extra code files. Detection is the same for every extension.
+./css_checker --code-ext .aspx,.ascx,.master,.cs,.vue,.svelte --verbose
 ```
 
 ### Mixed Project (React + ASP.NET)
@@ -179,18 +179,24 @@ cat unused-css-report.md
 # 3. Perform the actual cleanup
 ./css_checker --cleanup
 
-# 4. Restore from backup if needed
+# 4. Restore from the first backup if needed
 # cp file.css.backup file.css
+#
+# Cleanup deletes a rule only when a selector is exactly the unused class.
+# `.used .unused` and `.used.unused` are left unchanged.
+# An existing `.backup` is not overwritten.
 ```
 
 ## Output
 
 ### Console Output
-The tool provides color-coded console output showing:
-- ✅ Used classes (in green)
-- ❌ Unused classes (in red)
-- 📊 Summary statistics
-- 📄 Generated report location
+On a terminal that supports color, the tool shows:
+- Unused classes
+- Dynamic classes that were left in place
+- Summary counts
+- The report path
+
+`--verbose` also lists each used class. Color is omitted when stdout is not a terminal.
 
 ### Markdown Report
 Generates a detailed report including:
@@ -201,18 +207,24 @@ Generates a detailed report including:
 
 ## Performance
 
-The C++ implementation offers significant performance improvements over JavaScript-based tools:
-- **2-5x faster** file scanning
-- **3-10x faster** regex processing
-- **Lower memory usage** for large codebases
-- **Native file system access**
+Each code file is read once and turned into a class-name index. Class lookup after that does not re-read or recompile patterns. There is no benchmark suite in this repository, so this README does not claim a speedup over other tools.
 
 ## Safety Features
 
-- **Backup Creation**: Automatically creates `.backup` files before cleanup
+- **Backup Creation**: The first `.backup` is kept; later cleanups do not replace it
+- **Atomic Replace**: Cleaned CSS is written to a temporary file and then moved into place
 - **Dry Run Mode**: Preview changes without modification
-- **Smart Pattern Detection**: Recognizes dynamic usage patterns
-- **Verbose Logging**: Detailed output for debugging
+- **Conservative Edits**: Compound selectors and unclosed rules are left unchanged
+- **Dynamic Classes**: Prefixes such as `icon--${name}` are reported and not deleted
+- **Empty Code Scan**: `--cleanup` is skipped when no code files were found, so a bad path cannot delete every class
+
+## Tests
+
+```bash
+cmake -S . -B build
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+```
 
 ## Contributing
 
@@ -230,11 +242,10 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 | Feature | JavaScript | C++ |
 |---------|------------|-----|
-| Performance | Moderate | Fast |
-| Memory Usage | Higher | Lower |
-| CSHTML Support | ❌ | ✅ |
-| ASPX Support | ❌ | ✅ |
-| Dependency-free | ❌ | ✅ |
-| Cross-platform | ✅ | ✅ |
+| Runtime dependencies | Required | None |
+| CSHTML Support | No | Yes |
+| ASPX Support | No | Yes |
+| Dependency-free | No | Yes |
+| Cross-platform | Yes | Yes |
 
 The C++ version is designed to be a drop-in replacement with enhanced capabilities for .NET web projects.

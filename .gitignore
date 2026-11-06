@@ -1,2 +1,9 @@
 /build
 /.vscode
+*.backup
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.tmp
+unused-css-report.md

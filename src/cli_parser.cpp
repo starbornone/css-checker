@@ -1,87 +1,88 @@
 #include "cli_parser.h"
+
 #include <iostream>
-#include <algorithm>
 #include <sstream>
 
 namespace css_checker {
+namespace {
+
+[[noreturn]] void fail(const std::string& message) {
+    std::cerr << "Error: " << message << "\n";
+    throw CliExit{2};
+}
+
+}
 
 CliParser::CliParser() {}
 
 Config CliParser::parse(int argc, char* argv[]) const {
     Config config;
-    
+
     for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-        
+        std::string arg = argv[i] == nullptr ? std::string() : std::string(argv[i]);
+
         if (arg == "--help" || arg == "-h") {
             print_help();
-            exit(0);
+            throw CliExit{0};
         }
-        else if (arg == "--version" || arg == "-v") {
+        if (arg == "--version" || arg == "-v") {
             print_version();
-            exit(0);
+            throw CliExit{0};
         }
-        else if (arg == "--verbose") {
+        if (arg == "--verbose") {
             config.verbose = true;
-        }
-        else if (arg == "--dry-run") {
+        } else if (arg == "--dry-run") {
             config.dry_run = true;
-        }
-        else if (arg == "--cleanup") {
+        } else if (arg == "--cleanup") {
             config.cleanup_mode = true;
-        }
-        else if (arg == "--no-report") {
+        } else if (arg == "--no-report") {
             config.generate_report = false;
-        }
-        else if (arg == "--src" || arg == "-s") {
-            if (i + 1 < argc) {
-                config.src_directory = argv[++i];
-            } else {
-                std::cerr << "Error: --src requires a directory path\n";
-                exit(1);
+        } else if (arg == "--src" || arg == "-s") {
+            if (i + 1 >= argc) {
+                fail("--src requires a directory path");
             }
-        }
-        else if (arg == "--report" || arg == "-r") {
-            if (i + 1 < argc) {
-                config.report_path = argv[++i];
-            } else {
-                std::cerr << "Error: --report requires a file path\n";
-                exit(1);
+            config.src_directory = argv[++i];
+        } else if (arg == "--report" || arg == "-r") {
+            if (i + 1 >= argc) {
+                fail("--report requires a file path");
             }
-        }
-        else if (arg == "--css-ext") {
-            if (i + 1 < argc) {
-                config.css_extensions.clear();
-                parse_extensions(argv[++i], config.css_extensions);
-            } else {
-                std::cerr << "Error: --css-ext requires a comma-separated list of extensions\n";
-                exit(1);
+            config.report_path = argv[++i];
+        } else if (arg == "--css-ext") {
+            if (i + 1 >= argc) {
+                fail("--css-ext requires a comma-separated list of extensions");
             }
-        }
-        else if (arg == "--code-ext") {
-            if (i + 1 < argc) {
-                config.code_extensions.clear();
-                parse_extensions(argv[++i], config.code_extensions);
-            } else {
-                std::cerr << "Error: --code-ext requires a comma-separated list of extensions\n";
-                exit(1);
+            config.css_extensions.clear();
+            parse_extensions(argv[++i], config.css_extensions);
+        } else if (arg == "--code-ext") {
+            if (i + 1 >= argc) {
+                fail("--code-ext requires a comma-separated list of extensions");
             }
-        }
-        else if (arg.front() == '-') {
+            config.code_extensions.clear();
+            parse_extensions(argv[++i], config.code_extensions);
+        } else if (arg == "--ignore") {
+            if (i + 1 >= argc) {
+                fail("--ignore requires a regular expression");
+            }
+            std::string pattern = argv[++i];
+            if (pattern.empty()) {
+                fail("--ignore requires a regular expression");
+            }
+            try {
+                config.ignore_patterns.emplace_back(pattern);
+            } catch (const std::regex_error&) {
+                fail("invalid --ignore pattern: " + pattern);
+            }
+        } else if (!arg.empty() && arg.front() == '-') {
             std::cerr << "Error: Unknown option: " << arg << "\n";
             std::cerr << "Use --help for usage information.\n";
-            exit(1);
-        }
-        else {
-            if (config.src_directory == "src") {
-                config.src_directory = arg;
-            } else {
-                std::cerr << "Error: Unexpected argument: " << arg << "\n";
-                exit(1);
-            }
+            throw CliExit{2};
+        } else if (config.src_directory == "src") {
+            config.src_directory = arg;
+        } else {
+            fail("Unexpected argument: " + arg);
         }
     }
-    
+
     return config;
 }
 
@@ -96,10 +97,11 @@ void CliParser::print_help() const {
     std::cout << "    -r, --report <FILE> Report file path (default: unused-css-report.md)\n";
     std::cout << "    --verbose           Show detailed output\n";
     std::cout << "    --dry-run           Show what would be done without making changes\n";
-    std::cout << "    --cleanup           Remove unused CSS classes (creates backups)\n";
+    std::cout << "    --cleanup           Remove unused CSS classes (keeps the first .backup)\n";
     std::cout << "    --no-report         Don't generate markdown report\n";
     std::cout << "    --css-ext <EXTS>    CSS file extensions (default: .css)\n";
-    std::cout << "    --code-ext <EXTS>   Code file extensions (default: .tsx,.ts,.js,.jsx,.cshtml,.aspx)\n\n";
+    std::cout << "    --code-ext <EXTS>   Code file extensions (default: .tsx,.ts,.js,.jsx,.cshtml,.aspx)\n";
+    std::cout << "    --ignore <REGEX>    Ignore class names fully matched by REGEX (repeatable)\n\n";
     std::cout << "EXAMPLES:\n";
     std::cout << "    css_checker                           # Analyze 'src' directory\n";
     std::cout << "    css_checker /path/to/project          # Analyze specific directory\n";
@@ -107,13 +109,26 @@ void CliParser::print_help() const {
     std::cout << "    css_checker --dry-run                 # Preview what would be cleaned\n";
     std::cout << "    css_checker --cleanup                 # Actually remove unused classes\n";
     std::cout << "    css_checker --src webapp --verbose    # Analyze 'webapp' directory with details\n";
-    std::cout << "    css_checker --code-ext .ts,.tsx,.vue  # Custom code file extensions\n\n";
-    std::cout << "SUPPORTED FILE TYPES:\n";
-    std::cout << "    CSS:        .css files\n";
-    std::cout << "    JavaScript: .js, .jsx, .ts, .tsx files\n";
-    std::cout << "    Razor:      .cshtml files (ASP.NET Core)\n";
-    std::cout << "    Web Forms:  .aspx files (ASP.NET Framework)\n\n";
-    std::cout << "The tool creates backup files (.backup extension) when using --cleanup.\n";
+    std::cout << "    css_checker --code-ext .ts,.tsx,.vue  # Custom code file extensions\n";
+    std::cout << "    css_checker --ignore ^col- --ignore ^row$\n\n";
+    std::cout << "DETECTION:\n";
+    std::cout << "    Every configured code file is read once. A class counts as used when it\n";
+    std::cout << "    appears in a class, className, or CssClass attribute, in clsx/cn/classnames,\n";
+    std::cout << "    in classList.add/toggle/contains/remove, as a whole quoted token, or in\n";
+    std::cout << "    @apply, @extend, or composes. Defining a selector does not count as a use.\n";
+    std::cout << "    A computed value such as class=\"@Model.Css\", CssClass=\"<%# Item.Css %>\",\n";
+    std::cout << "    className={styles.btn}, or :class=\"itemClass\" leaves every name without a\n";
+    std::cout << "    literal use in place.\n";
+    std::cout << "    A template such as icon--${name} marks icon--* as dynamic. Dynamic classes\n";
+    std::cout << "    are reported and are not deleted.\n\n";
+    std::cout << "CLEANUP:\n";
+    std::cout << "    --cleanup deletes a rule only when a selector is exactly that class\n";
+    std::cout << "    (optional pseudos allowed). .used .unused and .used.unused are kept.\n";
+    std::cout << "    The first .backup beside a stylesheet is never overwritten.\n\n";
+    std::cout << "EXIT CODES:\n";
+    std::cout << "    0  No unused class has a selector that is exactly that class\n";
+    std::cout << "    1  An unused class still has an exact selector\n";
+    std::cout << "    2  Bad arguments, the files could not be analyzed, or cleanup failed\n";
 }
 
 void CliParser::print_version() const {

@@ -2,41 +2,39 @@
 
 #include "common.h"
 
+#include <unordered_map>
+#include <unordered_set>
+
 namespace css_checker {
+
+struct UsageIndex {
+    std::unordered_map<std::string, std::vector<Usage>> usages;
+    std::unordered_set<std::string> dynamic_prefixes;
+    std::string opaque_file;
+    int opaque_line = 0;
+};
+
+enum class ClassDisposition {
+    Used,
+    Unused,
+    Unknown
+};
+
+struct ClassMatch {
+    ClassDisposition disposition = ClassDisposition::Unused;
+    std::vector<Usage> usages;
+};
 
 class UsageDetector {
 public:
     explicit UsageDetector(const Config& config);
-    
-    std::vector<Usage> find_class_usage(const std::string& class_name, 
-                                         const std::vector<std::string>& code_files) const;
-    
+
+    UsageIndex build_index(const std::vector<std::string>& code_files,
+                           const std::vector<std::string>& css_files = {}) const;
+    ClassMatch classify(const UsageIndex& index, const std::string& class_name) const;
+
 private:
     const Config& config_;
-    
-    std::vector<Usage> detect_in_js_ts_file(const std::string& class_name, 
-                                             const std::string& file_path, 
-                                             const std::string& content) const;
-    
-    std::vector<Usage> detect_in_cshtml_file(const std::string& class_name, 
-                                              const std::string& file_path, 
-                                              const std::string& content) const;
-    
-    std::vector<Usage> detect_in_aspx_file(const std::string& class_name, 
-                                            const std::string& file_path, 
-                                            const std::string& content) const;
-    
-    bool is_dynamically_used(const std::string& class_name, const std::string& content) const;
-    std::string get_file_extension(const std::string& file_path) const;
-    std::string escape_regex(const std::string& str) const;
-    int find_line_number(const std::string& content, size_t position) const;
-    std::string get_line_context(const std::string& content, int line_number) const;
-    
-    std::vector<Usage> find_pattern_matches(const std::string& class_name,
-                                             const std::string& file_path,
-                                             const std::string& content,
-                                             const std::vector<std::regex>& patterns,
-                                             const std::string& usage_type) const;
 };
 
 }

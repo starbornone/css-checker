@@ -7,9 +7,9 @@ cd build
 
 :: Configure with CMake
 echo Configuring with CMake...
-cmake .. -G "Visual Studio 17 2022" -A x64
+cmake .. -A x64
 if errorlevel 1 (
-    echo CMake configuration failed. Trying with different generator...
+    echo CMake configuration failed. Trying with MinGW Makefiles...
     cmake .. -G "MinGW Makefiles"
     if errorlevel 1 (
         echo CMake configuration failed. Please check your CMake installation.

@@ -12,9 +12,6 @@ else()
     add_compile_options(-Wall -Wextra -pedantic)
 endif()
 
-# Find required packages
-find_package(Threads REQUIRED)
-
 # Include directories
 include_directories(include)
 
@@ -42,8 +39,9 @@ set(HEADERS
 # Create executable
 add_executable(css_checker ${SOURCES} ${HEADERS})
 
-# Link libraries
-target_link_libraries(css_checker Threads::Threads)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.1)
+    target_link_libraries(css_checker stdc++fs)
+endif()
 
 # Installation
 install(TARGETS css_checker DESTINATION bin)
@@ -52,3 +50,27 @@ install(TARGETS css_checker DESTINATION bin)
 set_target_properties(css_checker PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+enable_testing()
+
+add_executable(css_checker_tests
+    tests/test_checker.cpp
+    src/common.cpp
+    src/css_parser.cpp
+    src/file_scanner.cpp
+    src/usage_detector.cpp
+    src/report_generator.cpp
+    src/cli_parser.cpp
+)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.1)
+    target_link_libraries(css_checker_tests stdc++fs)
+endif()
+
+set_target_properties(css_checker_tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+add_test(NAME checker COMMAND css_checker_tests)
+add_test(NAME cli_help COMMAND css_checker --help)
+add_test(NAME cli_version COMMAND css_checker --version)
