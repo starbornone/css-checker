@@ -120,9 +120,11 @@ OPTIONS:
 
 CSS class names are read from `.css` files (comments and strings are skipped). Every configured code extension is scanned the same way:
 
-- `class`, `className`, and `CssClass` attributes, including `@class`
-- `clsx(...)`, `cn(...)`, `classnames(...)`
-- `classList.add` / `toggle` / `contains` / `remove`
+- `class`, `className`, and `CssClass` attributes, including `@class`, Svelte `class:btn`, and Angular `[class]`, `[class.btn]`, `[ngClass]`, and `@HostBinding('class.btn')`
+- `clsx(...)`, `cn(...)`, `classnames(...)`, including object keys such as `clsx({ btn: on })` and `className={{ active: on }}`
+- `classList.add` / `toggle` / `contains` / `remove` / `replace`
+- `setAttribute("class", ...)` and `setAttributeNS(namespace, "class", ...)`
+- `.addClass` / `.removeClass` / `.toggleClass` / `.hasClass`, `.attr("class", ...)` / `.prop("className", ...)`, and `className = ...` / `className += ...`
 - A quoted string that is exactly one class token, such as `"lonely"`
 - `@apply`, `@extend`, and `composes` in stylesheets. The selector that defines a class is not a use
 - A computed class value, such as `class="@Model.Css"`, `CssClass="<%# Item.Css %>"`, `className={styles.btn}`, or `:class="itemClass"`. Names without a literal use are reported as dynamic and are not deleted. A string literal in the same expression still counts
@@ -131,7 +133,7 @@ CSS class names are read from `.css` files (comments and strings are skipped). E
 
 Add extensions with `--code-ext` when a project uses Vue, Svelte, HTML, or C# files. A `class` or `className` attribute in those files is enough.
 
-A template prefix such as `icon--${name}`, or a C# interpolated string with the same shape, marks `icon--*` as dynamic. Dynamic classes are reported and are not deleted. `node_modules`, `bin`, `obj`, and `.git` are not scanned.
+A template prefix such as `icon--${name}` or `icon__${name}`, a concatenation such as `"icon--" + name`, or a Razor value such as `icon-@name` and `@($"icon--{name}")`, marks that prefix as dynamic. Other names stay eligible for cleanup. Dynamic classes are reported and are not deleted. `node_modules`, `bin`, `obj`, and `.git` are not scanned.
 
 ## Exit codes
 

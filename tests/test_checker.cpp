@@ -508,6 +508,317 @@ void test_computed_class_bindings() {
     }
 }
 
+void test_object_class_keys() {
+    Config config;
+    UsageDetector detector(config);
+    auto kind = [&](const UsageIndex& index, const std::string& name) {
+        return detector.classify(index, name).disposition;
+    };
+
+    {
+        TempDir dir;
+        write_file(dir.path / "App.tsx",
+                   "export const A = () => <div className={{ active: isOn, \"btn-primary\": ready }} />;\n"
+                   "const classes = clsx({ hidden: off, card: true }, \"banner\");\n"
+                   "export const C = () => <b className={clsx({ panel: cond ? \"alpha\" : \"beta\" })} />;\n");
+        write_file(dir.path / "Widget.vue", "<b :class=\"{ shell: ready }\"></b>\n");
+        UsageIndex index = detector.build_index(
+            {(dir.path / "App.tsx").string(), (dir.path / "Widget.vue").string()});
+        EXPECT(kind(index, "active") == ClassDisposition::Used);
+        EXPECT(kind(index, "btn-primary") == ClassDisposition::Used);
+        EXPECT(kind(index, "hidden") == ClassDisposition::Used);
+        EXPECT(kind(index, "card") == ClassDisposition::Used);
+        EXPECT(kind(index, "banner") == ClassDisposition::Used);
+        EXPECT(kind(index, "panel") == ClassDisposition::Used);
+        EXPECT(kind(index, "alpha") == ClassDisposition::Used);
+        EXPECT(kind(index, "beta") == ClassDisposition::Used);
+        EXPECT(kind(index, "shell") == ClassDisposition::Used);
+        EXPECT(kind(index, "orphan") == ClassDisposition::Unused);
+        EXPECT(index.opaque_file.empty());
+    }
+
+    {
+        TempDir dir;
+        write_file(dir.path / "Branch.tsx", "export const B = () => <i className={cond ? foo : bar} />;\n");
+        UsageIndex branch = detector.build_index({(dir.path / "Branch.tsx").string()});
+        EXPECT(kind(branch, "foo") == ClassDisposition::Unknown);
+        EXPECT(kind(branch, "bar") == ClassDisposition::Unknown);
+        EXPECT(kind(branch, "orphan") == ClassDisposition::Unknown);
+        EXPECT(!branch.opaque_file.empty());
+    }
+
+    {
+        TempDir dir;
+        write_file(dir.path / "Spread.tsx", "clsx({ ...classes, btn: true });\n");
+        write_file(dir.path / "Computed.tsx", "clsx({ [name]: true, kept: on });\n");
+        UsageIndex spread = detector.build_index({(dir.path / "Spread.tsx").string()});
+        EXPECT(kind(spread, "btn") == ClassDisposition::Used);
+        EXPECT(kind(spread, "orphan") == ClassDisposition::Unknown);
+        EXPECT(!spread.opaque_file.empty());
+
+        UsageIndex computed = detector.build_index({(dir.path / "Computed.tsx").string()});
+        EXPECT(kind(computed, "kept") == ClassDisposition::Used);
+        EXPECT(kind(computed, "orphan") == ClassDisposition::Unknown);
+        EXPECT(kind(computed, "name") == ClassDisposition::Unknown);
+    }
+}
+
+void test_concatenated_prefixes() {
+    Config config;
+    UsageDetector detector(config);
+    auto kind = [&](const UsageIndex& index, const std::string& name) {
+        return detector.classify(index, name).disposition;
+    };
+
+    {
+        TempDir dir;
+        write_file(dir.path / "App.tsx",
+                   "export const Icon = (name: string) => <i className={\"icon--\" + name} />;\n"
+                   "export const Btn = (size: string) => <b className={\"btn btn-\" + size} />;\n"
+                   "export const Tail = (name: string) => <i className={\"icon--\" + name + \"-end\"} />;\n");
+        UsageIndex index = detector.build_index({(dir.path / "App.tsx").string()});
+        EXPECT(kind(index, "icon--close") == ClassDisposition::Unknown);
+        EXPECT(kind(index, "btn") == ClassDisposition::Used);
+        EXPECT(kind(index, "btn-lg") == ClassDisposition::Unknown);
+        EXPECT(kind(index, "header") == ClassDisposition::Unused);
+        EXPECT(index.opaque_file.empty());
+    }
+
+    {
+        TempDir dir;
+        write_file(dir.path / "Mix.tsx",
+                   "export const A = (extra: string) => <div className={\"btn \" + extra} />;\n"
+                   "export const B = (extra: string) => <div className={extra + \" pad\"} />;\n");
+        UsageIndex index = detector.build_index({(dir.path / "Mix.tsx").string()});
+        EXPECT(kind(index, "btn") == ClassDisposition::Used);
+        EXPECT(kind(index, "pad") == ClassDisposition::Used);
+        EXPECT(kind(index, "orphan") == ClassDisposition::Unknown);
+        EXPECT(!index.opaque_file.empty());
+    }
+}
+
+void test_markup_prefixes() {
+    Config config;
+    UsageDetector detector(config);
+    auto kind = [&](const UsageIndex& index, const std::string& name) {
+        return detector.classify(index, name).disposition;
+    };
+
+    TempDir dir;
+    write_file(dir.path / "Page.cshtml",
+               "<div class=\"icon-@name\"></div>\n"
+               "<span class=\"btn\"></span>\n"
+               "<i class=\"@($\"icon--{kind}\")\"></i>\n"
+               "<b class=\"pad icon-@name tail\"></b>\n");
+    UsageIndex index = detector.build_index({(dir.path / "Page.cshtml").string()});
+    EXPECT(kind(index, "btn") == ClassDisposition::Used);
+    EXPECT(kind(index, "pad") == ClassDisposition::Used);
+    EXPECT(kind(index, "tail") == ClassDisposition::Used);
+    EXPECT(kind(index, "icon-close") == ClassDisposition::Unknown);
+    EXPECT(kind(index, "icon--close") == ClassDisposition::Unknown);
+    EXPECT(kind(index, "header") == ClassDisposition::Unused);
+    EXPECT(index.opaque_file.empty());
+}
+
+void test_directive_class_names() {
+    Config config;
+    UsageDetector detector(config);
+    TempDir dir;
+    write_file(dir.path / "Widget.svelte",
+               "<div class:active class:btn-primary={on}></div>\n"
+               "<b [class.hidden]=\"off\" [ngClass]=\"{ panel: ready }\" [ngClass]=\"'card'\"></b>\n");
+    UsageIndex index = detector.build_index({(dir.path / "Widget.svelte").string()});
+    auto kind = [&](const std::string& name) { return detector.classify(index, name).disposition; };
+    EXPECT(kind("active") == ClassDisposition::Used);
+    EXPECT(kind("btn-primary") == ClassDisposition::Used);
+    EXPECT(kind("hidden") == ClassDisposition::Used);
+    EXPECT(kind("panel") == ClassDisposition::Used);
+    EXPECT(kind("card") == ClassDisposition::Used);
+    EXPECT(kind("orphan") == ClassDisposition::Unused);
+    EXPECT(kind("on") == ClassDisposition::Unused);
+    EXPECT(kind("off") == ClassDisposition::Unused);
+    EXPECT(index.opaque_file.empty());
+}
+
+void test_bem_prefixes() {
+    Config config;
+    UsageDetector detector(config);
+    auto kind = [&](const UsageIndex& index, const std::string& name) {
+        return detector.classify(index, name).disposition;
+    };
+
+    TempDir dir;
+    write_file(dir.path / "App.tsx",
+               "export const Icon = (name: string) => <i className={`icon__${name}`} />;\n"
+               "export const Block = (name: string) => <b className={\"block__\" + name} />;\n");
+    write_file(dir.path / "Page.cshtml", "<div class=\"card__@part\"></div>\n");
+    UsageIndex index = detector.build_index({(dir.path / "App.tsx").string(), (dir.path / "Page.cshtml").string()});
+    EXPECT(kind(index, "icon__close") == ClassDisposition::Unknown);
+    EXPECT(kind(index, "block__title") == ClassDisposition::Unknown);
+    EXPECT(kind(index, "card__body") == ClassDisposition::Unknown);
+    EXPECT(kind(index, "icon") == ClassDisposition::Unused);
+    EXPECT(kind(index, "header") == ClassDisposition::Unused);
+    EXPECT(index.opaque_file.empty());
+}
+
+void test_dom_class_apis() {
+    Config config;
+    UsageDetector detector(config);
+    auto kind = [&](const UsageIndex& index, const std::string& name) {
+        return detector.classify(index, name).disposition;
+    };
+
+    {
+        TempDir dir;
+        write_file(dir.path / "App.tsx",
+                   "el.classList.replace(\"old\", \"btn\");\n"
+                   "el.setAttribute(\"class\", \"panel card\");\n"
+                   "el.setAttribute(\"CLASS\", \"hidden\");\n"
+                   "node.setAttributeNS(null, \"className\", \"widget\");\n"
+                   "node.setAttribute(\"id\", \"panel card\");\n");
+        UsageIndex index = detector.build_index({(dir.path / "App.tsx").string()});
+        EXPECT(kind(index, "old") == ClassDisposition::Used);
+        EXPECT(kind(index, "btn") == ClassDisposition::Used);
+        EXPECT(kind(index, "panel") == ClassDisposition::Used);
+        EXPECT(kind(index, "card") == ClassDisposition::Used);
+        EXPECT(kind(index, "hidden") == ClassDisposition::Used);
+        EXPECT(kind(index, "widget") == ClassDisposition::Used);
+        EXPECT(kind(index, "orphan") == ClassDisposition::Unused);
+        EXPECT(index.opaque_file.empty());
+    }
+
+    {
+        TempDir dir;
+        write_file(dir.path / "Dyn.tsx", "el.setAttribute(\"class\", extra);\n");
+        UsageIndex index = detector.build_index({(dir.path / "Dyn.tsx").string()});
+        EXPECT(kind(index, "extra") == ClassDisposition::Unknown);
+        EXPECT(kind(index, "orphan") == ClassDisposition::Unknown);
+        EXPECT(!index.opaque_file.empty());
+    }
+}
+
+void test_jquery_and_classname_assignment() {
+    Config config;
+    UsageDetector detector(config);
+    auto kind = [&](const UsageIndex& index, const std::string& name) {
+        return detector.classify(index, name).disposition;
+    };
+
+    {
+        TempDir dir;
+        write_file(dir.path / "App.js",
+                   "$(el).addClass(\"panel card\");\n"
+                   "$(el).removeClass(\"old\");\n"
+                   "$(el).toggleClass({ open: on });\n"
+                   "el.className = cond ? \"btn primary\" : \"wide\";\n"
+                   "el.className += \" extra\";\n"
+                   "function addClass(name) { return name; }\n");
+        UsageIndex index = detector.build_index({(dir.path / "App.js").string()});
+        EXPECT(kind(index, "panel") == ClassDisposition::Used);
+        EXPECT(kind(index, "card") == ClassDisposition::Used);
+        EXPECT(kind(index, "old") == ClassDisposition::Used);
+        EXPECT(kind(index, "open") == ClassDisposition::Used);
+        EXPECT(kind(index, "btn") == ClassDisposition::Used);
+        EXPECT(kind(index, "primary") == ClassDisposition::Used);
+        EXPECT(kind(index, "wide") == ClassDisposition::Used);
+        EXPECT(kind(index, "extra") == ClassDisposition::Used);
+        EXPECT(kind(index, "orphan") == ClassDisposition::Unused);
+        EXPECT(kind(index, "name") == ClassDisposition::Unused);
+        EXPECT(index.opaque_file.empty());
+    }
+
+    {
+        TempDir dir;
+        write_file(dir.path / "Dyn.js", "$(el).addClass(extra);\n");
+        UsageIndex index = detector.build_index({(dir.path / "Dyn.js").string()});
+        EXPECT(kind(index, "orphan") == ClassDisposition::Unknown);
+        EXPECT(!index.opaque_file.empty());
+    }
+}
+
+void test_jquery_attr_and_prop() {
+    Config config;
+    UsageDetector detector(config);
+    auto kind = [&](const UsageIndex& index, const std::string& name) {
+        return detector.classify(index, name).disposition;
+    };
+
+    {
+        TempDir dir;
+        write_file(dir.path / "App.js",
+                   "$(el).attr(\"class\", \"panel card\");\n"
+                   "$(el).prop(\"className\", \"widget\");\n"
+                   "$(el).attr({ class: \"btn primary\", id: \"not a class\", \"cssClass\": cond ? \"wide\" : \"tail\" });\n"
+                   "$(el).prop(\"id\", \"panel card\");\n");
+        UsageIndex index = detector.build_index({(dir.path / "App.js").string()});
+        EXPECT(kind(index, "panel") == ClassDisposition::Used);
+        EXPECT(kind(index, "card") == ClassDisposition::Used);
+        EXPECT(kind(index, "widget") == ClassDisposition::Used);
+        EXPECT(kind(index, "btn") == ClassDisposition::Used);
+        EXPECT(kind(index, "primary") == ClassDisposition::Used);
+        EXPECT(kind(index, "wide") == ClassDisposition::Used);
+        EXPECT(kind(index, "tail") == ClassDisposition::Used);
+        EXPECT(kind(index, "orphan") == ClassDisposition::Unused);
+        EXPECT(index.opaque_file.empty());
+    }
+
+    {
+        TempDir dir;
+        write_file(dir.path / "OnlyId.js", "$(el).prop(\"id\", \"from-id other\");\n");
+        UsageIndex index = detector.build_index({(dir.path / "OnlyId.js").string()});
+        EXPECT(kind(index, "from-id") == ClassDisposition::Unused);
+        EXPECT(kind(index, "other") == ClassDisposition::Unused);
+        EXPECT(index.opaque_file.empty());
+    }
+
+    {
+        TempDir dir;
+        write_file(dir.path / "Dyn.js", "$(el).attr(\"class\", extra);\n");
+        UsageIndex index = detector.build_index({(dir.path / "Dyn.js").string()});
+        EXPECT(kind(index, "orphan") == ClassDisposition::Unknown);
+        EXPECT(!index.opaque_file.empty());
+    }
+}
+
+void test_angular_host_bindings() {
+    Config config;
+    UsageDetector detector(config);
+    auto kind = [&](const UsageIndex& index, const std::string& name) {
+        return detector.classify(index, name).disposition;
+    };
+
+    {
+        TempDir dir;
+        write_file(dir.path / "View.html", "<div [class]=\"'btn primary'\"></div>\n<div [class.wide]=\"on\"></div>\n");
+        write_file(dir.path / "Host.ts",
+                   "@HostBinding('class.widget')\n"
+                   "isWidget = true;\n"
+                   "@HostBinding('class')\n"
+                   "host = 'panel card';\n"
+                   "@HostBinding('attr.role')\n"
+                   "role = 'menu button';\n");
+        UsageIndex index = detector.build_index({(dir.path / "View.html").string(), (dir.path / "Host.ts").string()});
+        EXPECT(kind(index, "btn") == ClassDisposition::Used);
+        EXPECT(kind(index, "primary") == ClassDisposition::Used);
+        EXPECT(kind(index, "wide") == ClassDisposition::Used);
+        EXPECT(kind(index, "widget") == ClassDisposition::Used);
+        EXPECT(kind(index, "panel") == ClassDisposition::Used);
+        EXPECT(kind(index, "card") == ClassDisposition::Used);
+        EXPECT(kind(index, "menu") == ClassDisposition::Unused);
+        EXPECT(kind(index, "button") == ClassDisposition::Unused);
+        EXPECT(kind(index, "orphan") == ClassDisposition::Unused);
+        EXPECT(index.opaque_file.empty());
+    }
+
+    {
+        TempDir dir;
+        write_file(dir.path / "Dyn.ts", "@HostBinding('class')\nhost = compute();\n");
+        UsageIndex index = detector.build_index({(dir.path / "Dyn.ts").string()});
+        EXPECT(kind(index, "orphan") == ClassDisposition::Unknown);
+        EXPECT(!index.opaque_file.empty());
+    }
+}
+
 void test_relative_path_respects_boundaries() {
     TempDir dir;
     fs::create_directories(dir.path / "src");
@@ -531,6 +842,15 @@ int main() {
     test_selector_uses();
     test_style_references_and_ignore_flag();
     test_computed_class_bindings();
+    test_object_class_keys();
+    test_concatenated_prefixes();
+    test_markup_prefixes();
+    test_directive_class_names();
+    test_bem_prefixes();
+    test_dom_class_apis();
+    test_jquery_and_classname_assignment();
+    test_jquery_attr_and_prop();
+    test_angular_host_bindings();
     test_relative_path_respects_boundaries();
 
     if (g_failures != 0) {
