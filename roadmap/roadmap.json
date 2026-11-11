@@ -1,0 +1,85 @@
+{
+  "schema": "name-roadmap/v1",
+  "file": "roadmap",
+  "updatedAt": "2026-11-11T23:12:32+11:00",
+  "project": {
+    "key": "css-checker",
+    "title": "CSS Checker C++",
+    "status": "active",
+    "summary": "Fast C++ CLI for finding and safely removing unused CSS classes in JS/TS, Razor, and Web Forms projects."
+  },
+  "items": [
+    {
+      "id": "harden-cleanup-file-replace",
+      "title": "Harden stylesheet replace so a failed rename cannot delete the live CSS",
+      "group": "safety",
+      "notes": "Critical from code review: cleanup_file removes the destination on rename failure then retries; if the second rename fails the live stylesheet is gone (worse when an older .backup was preserved). Never delete the live file; prefer copy/replace or rename-aside with rollback. Cover with a regression test."
+    },
+    {
+      "id": "extract-classes-from-selectors-only",
+      "title": "Extract CSS class definitions from selectors only",
+      "group": "correctness",
+      "notes": "High from code review: dots in values such as url(/assets/hero.webp) become fake classes (.webp) and are mislabelled as kept compound selectors. Reuse the selector walk from exact vs compound cleanup."
+    },
+    {
+      "id": "scope-opaque-dynamic-bindings",
+      "title": "Narrow opaque/computed binding impact on unused reporting",
+      "group": "detection",
+      "notes": "High from code review: one opaque binding (e.g. className={styles.btn}) marks every class without a literal hit as Unknown project-wide and can force exit 0. Scope opacity, or still report unused with clear suppression counts and docs."
+    },
+    {
+      "id": "fix-ignore-regex-match-semantics",
+      "title": "Align --ignore matching with documented full-match semantics",
+      "group": "cli",
+      "notes": "Medium from code review: help says class names are fully matched; should_ignore_class uses std::regex_search so btn ignores btn-primary. Switch to regex_match or fix help/README to require anchors."
+    },
+    {
+      "id": "label-non-selector-class-hits",
+      "title": "Stop labelling non-selector class hits as kept compound selectors",
+      "group": "correctness",
+      "notes": "Medium from code review: analyze_files puts anything not exact into kept, including phantoms with no selector use. Use exact / complex / not-in-selector buckets. Pairs with extract-classes-from-selectors-only."
+    },
+    {
+      "id": "fail-exit-on-report-write-error",
+      "title": "Fail the process when the markdown report cannot be written",
+      "group": "cli",
+      "notes": "Medium from code review: generate_markdown_report logs and returns on open failure while main still exits 0/1. Return bool and map to exit 2 when a report was requested."
+    },
+    {
+      "id": "cache-line-context-offsets",
+      "title": "Cache line offsets instead of re-splitting files for every context line",
+      "group": "performance",
+      "notes": "Medium from code review: get_line_context splits the whole file per hit (O(occurrences × size)). Compute line starts once per file or gather context lazily."
+    },
+    {
+      "id": "split-usage-detector-modules",
+      "title": "Split usage_detector.cpp into focused indexing modules",
+      "group": "maintainability",
+      "notes": "High maintainability from code review: ~1.4k-line anonymous namespace mixes markup, JS calls, jQuery, Angular host bindings, and style refs. Split behind the UsageDetector façade after correctness fixes; keep behavioural tests green."
+    },
+    {
+      "id": "add-benchmark-suite",
+      "title": "Add a reproducible benchmark suite",
+      "group": "performance",
+      "notes": "README states there is no benchmark suite and therefore claims no speedup over other tools. Add fixtures and a documented way to measure scan/index time so performance claims can be evidence-based."
+    },
+    {
+      "id": "mixed-stack-e2e-fixtures",
+      "title": "Add end-to-end fixtures for React + ASP.NET mixed trees",
+      "group": "testing",
+      "notes": "README examples cover wwwroot, ClientApp, and Web Forms extensions. Add checked-in fixtures exercised via ctest that mirror those layouts, including opaque-binding and cleanup interactions called out in review."
+    },
+    {
+      "id": "macos-ci-build-test",
+      "title": "Run build and ctest on macOS in CI",
+      "group": "tooling",
+      "notes": "README documents Linux/macOS CMake builds; CI currently covers Linux and Windows only. Assumption: adding macos-latest is desirable for the claimed cross-platform support."
+    },
+    {
+      "id": "cli-extension-preset-examples",
+      "title": "Document ready-made --code-ext presets for Vue, Svelte, and HTML",
+      "group": "docs",
+      "notes": "README already explains adding extensions. Ship copy-paste presets in getting-started or FAQ so newcomers do not invent incomplete lists."
+    }
+  ]
+}

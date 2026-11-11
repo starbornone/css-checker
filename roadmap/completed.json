@@ -1,0 +1,75 @@
+{
+  "schema": "name-roadmap/v1",
+  "file": "completed",
+  "updatedAt": "2026-11-11T23:12:32+11:00",
+  "project": {
+    "key": "css-checker",
+    "title": "CSS Checker C++",
+    "status": "active"
+  },
+  "items": [
+    {
+      "id": "cmake-cli-scaffold",
+      "title": "Ship CMake C++17 CLI scaffold with build scripts",
+      "group": "tooling",
+      "notes": "CMakeLists, Makefile, build.sh, build.bat, and documented binary output paths.",
+      "completedAt": "2026-11-11T23:06:34+11:00"
+    },
+    {
+      "id": "file-scanner-skips-vendor-dirs",
+      "title": "Scan source trees by extension while skipping node_modules, bin, obj, and .git",
+      "group": "scanning",
+      "notes": "Configurable --src, --css-ext, and --code-ext.",
+      "completedAt": "2026-11-11T23:06:34+11:00"
+    },
+    {
+      "id": "multi-format-usage-detection",
+      "title": "Detect class usage across JS/TS, Razor, and Web Forms patterns",
+      "group": "detection",
+      "notes": "Attributes, clsx/cn/classnames, classList, DOM helpers, style references such as @apply/@extend/composes, and related patterns documented in the README.",
+      "completedAt": "2026-11-11T23:06:34+11:00"
+    },
+    {
+      "id": "dynamic-class-reporting",
+      "title": "Report dynamic prefixes and computed bindings without deleting them",
+      "group": "detection",
+      "notes": "Prefixes like icon--${name} and computed values remain in place and appear in reports.",
+      "completedAt": "2026-11-11T23:06:34+11:00"
+    },
+    {
+      "id": "exact-selector-cleanup-backup",
+      "title": "Remove only exact-selector unused rules with first-.backup and dry-run",
+      "group": "cleanup",
+      "notes": "Compound/nested/unclosed rules kept; empty code scan refuses cleanup; --dry-run previews without writes.",
+      "completedAt": "2026-11-11T23:06:34+11:00"
+    },
+    {
+      "id": "console-and-markdown-reports",
+      "title": "Emit console summaries and markdown unused-class reports",
+      "group": "reporting",
+      "notes": "Colour when stdout is a TTY; --report / --no-report; exit codes 0/1/2 as documented.",
+      "completedAt": "2026-11-11T23:06:34+11:00"
+    },
+    {
+      "id": "ignore-regex-option",
+      "title": "Support repeatable --ignore regular expressions for class names",
+      "group": "cli",
+      "notes": "Documented examples such as ^col- and ^row$.",
+      "completedAt": "2026-11-11T23:06:34+11:00"
+    },
+    {
+      "id": "behavioural-ctest-suite",
+      "title": "Provide behavioural tests runnable via ctest",
+      "group": "testing",
+      "notes": "css_checker_tests plus cli_help/cli_version; Linux and Windows CI workflow.",
+      "completedAt": "2026-11-11T23:06:34+11:00"
+    },
+    {
+      "id": "agent-ready-documentation-set",
+      "title": "Add AGENTS.md, docs/, and roadmap JSON for agent-ready documentation",
+      "group": "docs",
+      "notes": "overview, architecture, getting-started, development, contributing, decisions, roadmap-format, and three roadmap files.",
+      "completedAt": "2026-11-11T23:06:34+11:00"
+    }
+  ]
+}

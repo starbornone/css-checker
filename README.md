@@ -15,6 +15,14 @@ A fast and efficient C++ tool for finding and removing unused CSS classes in web
 - **Detailed Reporting**: Generates markdown reports with comprehensive analysis
 - **Flexible Configuration**: Customizable file extensions and source directories
 
+## Documentation
+
+- [docs/overview.md](docs/overview.md) — product overview, audience, and non-goals
+- [AGENTS.md](AGENTS.md) — conventions for coding agents
+- [roadmap/roadmap.json](roadmap/roadmap.json) — active work (see also `completed.json` / `cancelled.json`)
+
+Further reading: [architecture](docs/architecture.md), [getting started](docs/getting-started.md), [development](docs/development.md), [contributing](docs/contributing.md), [decisions](docs/decisions.md), [roadmap format](docs/roadmap-format.md).
+
 ## Installation
 
 ### Prerequisites
